@@ -1,0 +1,1881 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ForensicMail — Email Header Forensics Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #080c10;
+  --bg2:      #0c1118;
+  --bg3:      #101620;
+  --bg4:      #141d28;
+  --bg5:      #1a2433;
+  --line:     rgba(0,200,150,0.10);
+  --line2:    rgba(0,200,150,0.18);
+  --line3:    rgba(0,200,150,0.30);
+  --g:        #00c896;
+  --g2:       #00e6aa;
+  --g3:       #4dffc9;
+  --gdim:     rgba(0,200,150,0.55);
+  --red:      #ff4d6a;
+  --red2:     #ff7a8a;
+  --redbg:    rgba(255,77,106,0.09);
+  --orange:   #ff9f43;
+  --orange2:  #ffbe76;
+  --orangebg: rgba(255,159,67,0.09);
+  --yellow:   #ffd32a;
+  --blue:     #48a9fe;
+  --blue2:    #7ec8ff;
+  --bluebg:   rgba(72,169,254,0.09);
+  --gbg:      rgba(0,200,150,0.08);
+  --text:     #d4e8d8;
+  --text2:    #7a9e8a;
+  --text3:    #4a6458;
+  --mono:     'IBM Plex Mono', monospace;
+  --sans:     'IBM Plex Sans', sans-serif;
+}
+
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  min-height: 100vh;
+  overflow-x: hidden;
+  cursor: default;
+}
+
+/* Scan-line overlay */
+body::after {
+  content:'';
+  position:fixed; inset:0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,200,150,0.012) 3px, rgba(0,200,150,0.012) 4px);
+  pointer-events:none; z-index:999;
+}
+
+/* ── HEADER BAR ── */
+.topbar {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:14px 28px;
+  border-bottom:1px solid var(--line2);
+  background: var(--bg2);
+  position:sticky; top:0; z-index:100;
+}
+
+.brand {
+  display:flex; align-items:center; gap:14px;
+}
+
+.brand-mark {
+  width:34px; height:34px;
+  border:1px solid var(--line3);
+  border-radius:6px;
+  display:flex; align-items:center; justify-content:center;
+  background: var(--gbg);
+  font-size:16px;
+  box-shadow: 0 0 14px rgba(0,200,150,0.15);
+}
+
+.brand-name {
+  font-size:17px; font-weight:700; letter-spacing:-0.5px;
+  color: var(--g2);
+}
+
+.brand-name span { color:var(--text2); font-weight:300; }
+
+.brand-sub {
+  font-size:9px; color:var(--text3); letter-spacing:2px;
+  text-transform:uppercase; margin-top:2px;
+}
+
+.topbar-right {
+  display:flex; align-items:center; gap:12px;
+}
+
+.status-pill {
+  display:flex; align-items:center; gap:6px;
+  padding:4px 11px;
+  border:1px solid var(--line2);
+  border-radius:3px;
+  font-size:9px; letter-spacing:1.5px; text-transform:uppercase;
+}
+
+.status-pill.ready { color:var(--g); border-color:rgba(0,200,150,0.25); }
+.status-pill.busy  { color:var(--orange); border-color:rgba(255,159,67,0.3); }
+
+.status-dot { width:5px; height:5px; border-radius:50%; background:currentColor; animation:blink 1.6s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+.clock {
+  font-size:11px; color:var(--text3);
+  border:1px solid var(--line);
+  padding:4px 10px;
+  border-radius:3px;
+}
+
+/* ── LAYOUT ── */
+.workspace {
+  display:grid;
+  grid-template-columns:520px 1fr;
+  gap:0;
+  min-height: calc(100vh - 63px);
+}
+
+/* ── LEFT PANE ── */
+.left-pane {
+  border-right:1px solid var(--line);
+  display:flex; flex-direction:column;
+  background: var(--bg2);
+}
+
+.pane-header {
+  padding:14px 20px;
+  border-bottom:1px solid var(--line);
+  display:flex; align-items:center; justify-content:space-between;
+}
+
+.pane-label {
+  font-size:9px; font-weight:600; letter-spacing:2px;
+  text-transform:uppercase; color:var(--text2);
+  display:flex; align-items:center; gap:8px;
+}
+
+.pane-label::before {
+  content:'';
+  width:3px; height:3px; border-radius:50%;
+  background:var(--g); box-shadow:0 0 6px var(--g);
+}
+
+.input-zone {
+  flex:1; padding:16px 20px; display:flex; flex-direction:column; gap:12px;
+}
+
+textarea#rawInput {
+  flex:1;
+  min-height:340px;
+  background: var(--bg);
+  border:1px solid var(--line2);
+  border-radius:4px;
+  color: #a0c8a8;
+  font-family: var(--mono);
+  font-size:11.5px;
+  line-height:1.7;
+  padding:14px 16px;
+  resize:vertical;
+  outline:none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  caret-color: var(--g);
+}
+
+textarea#rawInput::placeholder { color:var(--text3); }
+textarea#rawInput:focus {
+  border-color: var(--line3);
+  box-shadow: 0 0 0 3px rgba(0,200,150,0.07), inset 0 0 30px rgba(0,200,150,0.02);
+}
+
+.meta-row {
+  display:grid; grid-template-columns:1fr 1fr; gap:8px;
+}
+
+.meta-field label {
+  display:block; font-size:9px; letter-spacing:1.5px; text-transform:uppercase;
+  color:var(--text3); margin-bottom:5px;
+}
+
+.meta-field input, .meta-field select {
+  width:100%;
+  background: var(--bg);
+  border:1px solid var(--line);
+  border-radius:3px;
+  color:var(--text);
+  font-family: var(--mono);
+  font-size:11px;
+  padding:7px 10px;
+  outline:none;
+  transition: border-color 0.2s;
+}
+
+.meta-field input:focus, .meta-field select:focus {
+  border-color:var(--line3);
+}
+
+.meta-field select option { background:var(--bg2); }
+
+.analyze-btn {
+  padding:13px;
+  background: transparent;
+  border:1px solid var(--g);
+  border-radius:4px;
+  color:var(--g2);
+  font-family:var(--mono);
+  font-size:13px;
+  font-weight:600;
+  letter-spacing:2px;
+  text-transform:uppercase;
+  cursor:pointer;
+  transition:all 0.2s;
+  display:flex; align-items:center; justify-content:center; gap:10px;
+  position:relative;
+  overflow:hidden;
+}
+
+.analyze-btn::before {
+  content:'';
+  position:absolute; inset:0;
+  background: linear-gradient(135deg, rgba(0,200,150,0.08), transparent);
+  opacity:0; transition:opacity 0.2s;
+}
+
+.analyze-btn:hover {
+  background:rgba(0,200,150,0.05);
+  box-shadow: 0 0 20px rgba(0,200,150,0.15), inset 0 0 20px rgba(0,200,150,0.03);
+  color:var(--g3);
+}
+
+.analyze-btn:hover::before { opacity:1; }
+.analyze-btn:active { transform:scale(0.99); }
+
+/* Sample loader */
+.samples-bar {
+  padding:10px 20px 14px;
+  border-top:1px solid var(--line);
+}
+
+.samples-label {
+  font-size:9px; letter-spacing:1.5px; text-transform:uppercase;
+  color:var(--text3); margin-bottom:7px;
+}
+
+.sample-list {
+  display:flex; flex-wrap:wrap; gap:5px;
+}
+
+.sample-btn {
+  font-family:var(--mono);
+  font-size:9px; letter-spacing:0.5px;
+  padding:4px 9px;
+  border:1px solid var(--line2);
+  border-radius:2px;
+  background:transparent;
+  color:var(--text2);
+  cursor:pointer;
+  transition:all 0.15s;
+}
+
+.sample-btn:hover {
+  border-color:var(--line3);
+  color:var(--g);
+  background: var(--gbg);
+}
+
+/* ── RIGHT PANE (RESULTS) ── */
+.right-pane {
+  display:flex; flex-direction:column;
+  background: var(--bg3);
+  overflow-y:auto;
+}
+
+/* Empty state */
+.empty-state {
+  flex:1; display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  padding:60px 40px;
+  gap:16px; text-align:center;
+  color:var(--text3);
+}
+
+.empty-grid {
+  display:grid; grid-template-columns:repeat(3,1fr); gap:1px;
+  background:var(--line);
+  border:1px solid var(--line);
+  border-radius:6px;
+  overflow:hidden;
+  margin-bottom:10px;
+}
+
+.eg-cell {
+  background:var(--bg3);
+  padding:14px 18px;
+  font-size:10px; letter-spacing:1px; text-transform:uppercase;
+  color:var(--text3); text-align:center;
+}
+
+.eg-cell span { display:block; font-size:16px; margin-bottom:4px; opacity:0.3; }
+
+.empty-title { font-size:13px; color:var(--text2); letter-spacing:1px; }
+.empty-sub { font-size:10px; line-height:1.8; color:var(--text3); max-width:320px; }
+
+/* ── RESULTS ── */
+.results-wrap { padding:20px 24px 40px; display:flex; flex-direction:column; gap:16px; }
+
+/* VERDICT BANNER */
+.verdict-banner {
+  border:1px solid;
+  border-radius:5px;
+  padding:16px 20px;
+  display:flex; align-items:center; gap:16px;
+  position:relative;
+  overflow:hidden;
+}
+
+.verdict-banner::before {
+  content:'';
+  position:absolute;
+  top:0; left:0; right:0; height:1px;
+}
+
+.vb-critical { border-color:rgba(255,77,106,0.35); background:var(--redbg); }
+.vb-critical::before { background:linear-gradient(90deg,transparent,var(--red),transparent); }
+.vb-high     { border-color:rgba(255,159,67,0.35); background:var(--orangebg); }
+.vb-high::before { background:linear-gradient(90deg,transparent,var(--orange),transparent); }
+.vb-medium   { border-color:rgba(255,211,42,0.25); background:rgba(255,211,42,0.05); }
+.vb-medium::before { background:linear-gradient(90deg,transparent,var(--yellow),transparent); }
+.vb-low      { border-color:rgba(0,200,150,0.25); background:var(--gbg); }
+.vb-low::before { background:linear-gradient(90deg,transparent,var(--g),transparent); }
+.vb-clean    { border-color:rgba(0,200,150,0.25); background:var(--gbg); }
+.vb-clean::before { background:linear-gradient(90deg,transparent,var(--g),transparent); }
+
+.verdict-score-ring {
+  position:relative; width:72px; height:72px; flex-shrink:0;
+}
+
+.verdict-score-ring svg { width:72px; height:72px; transform:rotate(-90deg); }
+.vsr-track { fill:none; stroke:rgba(255,255,255,0.06); stroke-width:5; }
+.vsr-fill  { fill:none; stroke-width:5; stroke-linecap:round; transition:stroke-dashoffset 1.2s cubic-bezier(.2,.8,.3,1); }
+
+.verdict-score-num {
+  position:absolute; inset:0;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  font-size:18px; font-weight:700; line-height:1;
+}
+
+.verdict-score-num small { font-size:8px; font-weight:400; color:var(--text3); letter-spacing:1px; text-transform:uppercase; margin-top:2px; }
+
+.verdict-body { flex:1; }
+
+.verdict-level {
+  font-size:10px; font-weight:700; letter-spacing:2px; text-transform:uppercase;
+  margin-bottom:5px;
+  display:flex; align-items:center; gap:8px;
+}
+
+.verdict-level::before { content:''; width:6px; height:6px; border-radius:50%; background:currentColor; box-shadow:0 0 8px currentColor; }
+
+.verdict-summary { font-size:12px; color:var(--text2); line-height:1.6; font-family:var(--sans); }
+
+.verdict-ts {
+  font-size:9px; color:var(--text3); margin-top:6px; font-family:var(--mono);
+  letter-spacing:0.3px;
+}
+
+/* ── SECTION CARD ── */
+.sec-card {
+  background: var(--bg4);
+  border:1px solid var(--line);
+  border-radius:5px;
+  overflow:hidden;
+}
+
+.sec-head {
+  padding:10px 16px;
+  border-bottom:1px solid var(--line);
+  background:rgba(0,200,150,0.03);
+  display:flex; align-items:center; justify-content:space-between;
+}
+
+.sec-title {
+  font-size:9px; font-weight:600; letter-spacing:2px; text-transform:uppercase;
+  color:var(--gdim);
+  display:flex; align-items:center; gap:8px;
+}
+
+.sec-badge {
+  font-size:9px;
+  padding:2px 7px;
+  border-radius:2px;
+  font-weight:600; letter-spacing:0.5px;
+}
+
+.badge-critical { background:rgba(255,77,106,0.15); color:var(--red); border:1px solid rgba(255,77,106,0.25); }
+.badge-high     { background:rgba(255,159,67,0.15); color:var(--orange); border:1px solid rgba(255,159,67,0.25); }
+.badge-medium   { background:rgba(255,211,42,0.12); color:var(--yellow); border:1px solid rgba(255,211,42,0.2); }
+.badge-low      { background:rgba(0,200,150,0.1); color:var(--g); border:1px solid rgba(0,200,150,0.2); }
+.badge-info     { background:rgba(72,169,254,0.1); color:var(--blue); border:1px solid rgba(72,169,254,0.2); }
+.badge-pass     { background:rgba(0,200,150,0.1); color:var(--g2); border:1px solid rgba(0,200,150,0.2); }
+.badge-fail     { background:rgba(255,77,106,0.1); color:var(--red); border:1px solid rgba(255,77,106,0.2); }
+.badge-none     { background:rgba(255,211,42,0.1); color:var(--yellow); border:1px solid rgba(255,211,42,0.2); }
+.badge-warn     { background:rgba(255,159,67,0.1); color:var(--orange); border:1px solid rgba(255,159,67,0.2); }
+
+/* ── KV TABLE ── */
+.kv-table { width:100%; border-collapse:collapse; }
+
+.kv-table tr { border-bottom:1px solid var(--line); }
+.kv-table tr:last-child { border-bottom:none; }
+
+.kv-table td {
+  padding:8px 16px;
+  vertical-align:top;
+  font-size:11px;
+}
+
+.kv-key {
+  color:var(--text3);
+  font-size:10px;
+  width:190px;
+  white-space:nowrap;
+  letter-spacing:0.3px;
+}
+
+.kv-val {
+  color:var(--text);
+  word-break:break-all;
+  line-height:1.6;
+}
+
+.kv-val.v-red    { color:var(--red2); }
+.kv-val.v-orange { color:var(--orange2); }
+.kv-val.v-green  { color:var(--g2); }
+.kv-val.v-blue   { color:var(--blue2); }
+.kv-val.v-yellow { color:var(--yellow); }
+.kv-val.v-dim    { color:var(--text2); }
+
+/* ── HOP CHAIN ── */
+.hop-chain { padding:14px 16px; display:flex; flex-direction:column; gap:6px; }
+
+.hop-item {
+  display:grid;
+  grid-template-columns:24px 1fr auto;
+  gap:10px;
+  align-items:start;
+  padding:10px 14px;
+  background:var(--bg5);
+  border:1px solid var(--line);
+  border-radius:4px;
+  position:relative;
+  animation:faderow 0.3s forwards;
+  opacity:0;
+}
+
+@keyframes faderow { to { opacity:1; } }
+
+.hop-num {
+  font-size:9px; font-weight:700;
+  color:var(--g); background:var(--gbg);
+  border:1px solid var(--line3);
+  border-radius:2px;
+  width:20px; height:20px;
+  display:flex; align-items:center; justify-content:center;
+  flex-shrink:0;
+}
+
+.hop-body { display:flex; flex-direction:column; gap:3px; }
+.hop-from { font-size:11px; color:var(--text); font-weight:500; }
+.hop-by   { font-size:10px; color:var(--text3); }
+.hop-proto { font-size:10px; color:var(--blue); }
+
+.hop-time {
+  font-size:10px; color:var(--text3);
+  white-space:nowrap; text-align:right;
+}
+
+.hop-connector {
+  width:1px; height:10px;
+  background:var(--line2);
+  margin:0 auto;
+}
+
+/* ── AUTH RESULT ROWS ── */
+.auth-rows { padding:14px 16px; display:flex; flex-direction:column; gap:8px; }
+
+.auth-row {
+  display:grid; grid-template-columns:80px 1fr 80px;
+  align-items:center; gap:12px;
+  padding:10px 14px;
+  background:var(--bg5);
+  border:1px solid var(--line);
+  border-radius:4px;
+}
+
+.auth-name { font-size:12px; font-weight:700; color:var(--text2); }
+.auth-detail { font-size:10px; color:var(--text3); line-height:1.5; }
+.auth-result { font-size:10px; font-weight:700; letter-spacing:1px; text-align:right; }
+.auth-result.pass  { color:var(--g); }
+.auth-result.fail  { color:var(--red); }
+.auth-result.none  { color:var(--yellow); }
+.auth-result.warn  { color:var(--orange); }
+.auth-result.neutral { color:var(--text3); }
+
+/* ── FLAGS / FINDINGS ── */
+.flags-list { padding:12px 16px; display:flex; flex-direction:column; gap:6px; }
+
+.flag-item {
+  display:flex; gap:12px; align-items:flex-start;
+  padding:10px 14px;
+  border:1px solid;
+  border-radius:4px;
+  font-size:11px; line-height:1.5;
+  font-family:var(--sans);
+  animation:faderow 0.25s both;
+  opacity:0;
+}
+
+.flag-item.f-critical { border-color:rgba(255,77,106,0.25); background:rgba(255,77,106,0.05); color:#ffb3be; }
+.flag-item.f-high     { border-color:rgba(255,159,67,0.25); background:rgba(255,159,67,0.05); color:#ffd4a0; }
+.flag-item.f-medium   { border-color:rgba(255,211,42,0.2); background:rgba(255,211,42,0.04); color:#ffe97a; }
+.flag-item.f-low      { border-color:rgba(0,200,150,0.2); background:rgba(0,200,150,0.04); color:#80e8c2; }
+.flag-item.f-info     { border-color:rgba(72,169,254,0.2); background:rgba(72,169,254,0.04); color:#9fd8ff; }
+
+.flag-ico { font-size:14px; flex-shrink:0; margin-top:1px; }
+.flag-text strong { display:block; font-family:var(--mono); font-size:11px; margin-bottom:2px; font-weight:600; }
+.flag-text span { font-size:10px; opacity:0.8; }
+
+/* ── MICROSOFT EXCHANGE ── */
+.msft-grid {
+  display:grid; grid-template-columns:1fr 1fr; gap:1px;
+  background:var(--line); border-top:1px solid var(--line);
+}
+
+.msft-cell {
+  background:var(--bg4);
+  padding:10px 14px;
+}
+
+.msft-label { font-size:9px; color:var(--text3); letter-spacing:1px; text-transform:uppercase; margin-bottom:4px; }
+.msft-value { font-size:11px; color:var(--text); word-break:break-all; line-height:1.5; }
+.msft-value.mv-good { color:var(--g2); }
+.msft-value.mv-bad  { color:var(--red2); }
+.msft-value.mv-warn { color:var(--orange2); }
+.msft-value.mv-blue { color:var(--blue2); }
+
+/* ── TIMELINE ── */
+.timeline { padding:14px 16px; display:flex; flex-direction:column; gap:0; }
+
+.tl-item {
+  display:grid; grid-template-columns:110px 1fr;
+  gap:14px; padding:8px 0;
+  border-left:1px solid var(--line2);
+  padding-left:16px;
+  position:relative;
+  font-size:11px;
+}
+
+.tl-item::before {
+  content:'';
+  position:absolute;
+  left:-4px; top:13px;
+  width:7px; height:7px;
+  border-radius:50%;
+  background:var(--g);
+  border:2px solid var(--bg4);
+  box-shadow:0 0 8px rgba(0,200,150,0.3);
+}
+
+.tl-time { color:var(--text3); font-size:10px; padding-top:1px; }
+.tl-event { color:var(--text2); line-height:1.5; }
+.tl-event strong { color:var(--text); display:block; margin-bottom:2px; font-size:11px; }
+
+/* ── ALL HEADERS RAW ── */
+.raw-headers-table {
+  width:100%; border-collapse:collapse;
+  font-size:10px;
+}
+
+.raw-headers-table tr { border-bottom:1px solid var(--line); }
+.raw-headers-table tr:last-child { border-bottom:none; }
+.raw-headers-table tr:nth-child(even) td { background:rgba(0,200,150,0.015); }
+
+.raw-headers-table td { padding:6px 14px; vertical-align:top; }
+
+.rh-key {
+  color:var(--gdim);
+  font-size:10px;
+  width:240px;
+  white-space:nowrap;
+  font-weight:500;
+}
+
+.rh-val {
+  color:var(--text2);
+  word-break:break-all;
+  line-height:1.6;
+}
+
+.rh-val.rh-flag { color:var(--red2); }
+.rh-val.rh-note { color:var(--orange2); }
+.rh-val.rh-good { color:var(--g2); }
+
+/* ── IOC BLOCK ── */
+.ioc-grid {
+  display:grid; grid-template-columns:1fr 1fr;
+  gap:1px; background:var(--line);
+  border-top:1px solid var(--line);
+}
+
+.ioc-section {
+  background:var(--bg4);
+  padding:14px 16px;
+}
+
+.ioc-label {
+  font-size:9px; letter-spacing:2px; text-transform:uppercase;
+  color:var(--text3); margin-bottom:8px;
+}
+
+.ioc-item {
+  display:flex; align-items:flex-start; gap:8px;
+  padding:5px 0;
+  border-bottom:1px solid var(--line);
+  font-size:10px;
+}
+
+.ioc-item:last-child { border-bottom:none; }
+
+.ioc-type {
+  font-size:8px; padding:2px 6px;
+  border-radius:2px; font-weight:700;
+  flex-shrink:0; margin-top:1px;
+  letter-spacing:0.5px;
+}
+
+.it-ip   { background:rgba(72,169,254,0.15); color:var(--blue); border:1px solid rgba(72,169,254,0.25); }
+.it-dom  { background:rgba(0,200,150,0.1); color:var(--g); border:1px solid rgba(0,200,150,0.2); }
+.it-email{ background:rgba(255,159,67,0.1); color:var(--orange); border:1px solid rgba(255,159,67,0.2); }
+.it-hash { background:rgba(139,92,246,0.15); color:#c4b5fd; border:1px solid rgba(139,92,246,0.25); }
+.it-url  { background:rgba(255,77,106,0.1); color:var(--red); border:1px solid rgba(255,77,106,0.2); }
+
+.ioc-val { color:var(--text); word-break:break-all; line-height:1.5; }
+
+/* ── COPY EXPORT BAR ── */
+.export-bar {
+  display:flex; gap:8px;
+  padding:14px 16px;
+  background:var(--bg5);
+  border-top:1px solid var(--line);
+}
+
+.export-btn {
+  flex:1;
+  padding:9px 8px;
+  border:1px solid var(--line2);
+  border-radius:3px;
+  background:transparent;
+  color:var(--text2);
+  font-family:var(--mono);
+  font-size:10px;
+  font-weight:600;
+  letter-spacing:1px;
+  text-transform:uppercase;
+  cursor:pointer;
+  transition:all 0.15s;
+  display:flex; align-items:center; justify-content:center; gap:6px;
+}
+
+.export-btn:hover {
+  background:var(--gbg);
+  border-color:var(--line3);
+  color:var(--g);
+}
+
+/* ── ANALYZING STATE ── */
+.analyzing-wrap {
+  flex:1; display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  padding:60px; gap:24px;
+}
+
+.scan-grid {
+  display:grid; grid-template-columns:repeat(5,1fr);
+  gap:1px; background:var(--line);
+  border:1px solid var(--line2);
+  border-radius:4px;
+  overflow:hidden;
+}
+
+.sg-cell {
+  height:32px;
+  background:var(--bg3);
+  animation:sgAnim 1.5s infinite;
+}
+
+@keyframes sgAnim {
+  0%,100% { background:var(--bg3); }
+  50%      { background:rgba(0,200,150,0.1); }
+}
+
+.scan-log {
+  width:340px;
+  display:flex; flex-direction:column; gap:4px;
+}
+
+.scan-log-item {
+  font-size:10px; color:var(--text3);
+  padding:4px 10px;
+  border:1px solid var(--line);
+  border-radius:2px;
+  background:var(--bg2);
+  opacity:0;
+  animation:faderow 0.3s forwards;
+  display:flex; align-items:center; gap:8px;
+}
+
+.scan-log-item::before { content:'›'; color:var(--g); }
+.scan-log-item.done { color:var(--g); border-color:rgba(0,200,150,0.2); background:var(--gbg); }
+
+/* ── TOAST ── */
+.toast {
+  position:fixed; bottom:24px; right:24px;
+  background:var(--bg5);
+  border:1px solid var(--line3);
+  border-radius:4px;
+  padding:10px 18px;
+  font-size:11px; color:var(--g);
+  transform:translateY(60px); opacity:0;
+  transition:all 0.25s;
+  z-index:999;
+  font-family:var(--mono);
+}
+
+.toast.show { transform:translateY(0); opacity:1; }
+
+/* ── RESPONSIVE ── */
+@media (max-width:1000px) {
+  .workspace { grid-template-columns:1fr; }
+  .left-pane { border-right:none; border-bottom:1px solid var(--line2); }
+  .ioc-grid, .msft-grid { grid-template-columns:1fr; }
+}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width:5px; }
+::-webkit-scrollbar-track { background:var(--bg2); }
+::-webkit-scrollbar-thumb { background:var(--line2); border-radius:3px; }
+::-webkit-scrollbar-thumb:hover { background:var(--line3); }
+
+/* Progress bar */
+.mini-progress { height:2px; background:var(--line); border-radius:1px; overflow:hidden; margin-top:6px; }
+.mini-progress-fill { height:100%; background:var(--g); border-radius:1px; transition:width 1s ease; }
+
+/* Collapsible raw section */
+.collapsible-toggle {
+  width:100%; background:none; border:none;
+  padding:10px 16px;
+  color:var(--text3);
+  font-family:var(--mono);
+  font-size:9px; letter-spacing:1.5px; text-transform:uppercase;
+  cursor:pointer;
+  text-align:left;
+  display:flex; align-items:center; justify-content:space-between;
+  border-top:1px solid var(--line);
+  transition:color 0.15s;
+}
+
+.collapsible-toggle:hover { color:var(--g); }
+.collapsible-toggle .arrow { transition:transform 0.2s; }
+.collapsible-toggle.open .arrow { transform:rotate(90deg); }
+.collapsible-body { display:none; }
+.collapsible-body.open { display:block; }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark">⚗</div>
+    <div>
+      <div class="brand-name">Forensic<span>Mail</span></div>
+      <div class="brand-sub">Email Header Forensics Platform</div>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div class="status-pill ready" id="statusPill">
+      <span class="status-dot"></span>
+      <span id="statusText">READY</span>
+    </div>
+    <div class="clock" id="clock">—</div>
+  </div>
+</header>
+
+<div class="workspace">
+
+  <!-- ═══ LEFT — INPUT ═══ -->
+  <div class="left-pane">
+    <div class="pane-header">
+      <div class="pane-label">Raw Email Input</div>
+      <div style="font-size:9px;color:var(--text3);letter-spacing:1px">PASTE FULL HEADERS + BODY</div>
+    </div>
+
+    <div class="input-zone">
+      <textarea id="rawInput" placeholder="Paste raw email headers here…
+
+Example fields parsed:
+  Received:  (all hops traced)
+  Authentication-Results:  (SPF/DKIM/DMARC)
+  DKIM-Signature:
+  X-MS-Exchange-*  (Microsoft 365 fields)
+  X-Originating-IP:
+  From / Reply-To / Return-Path
+  Message-ID:
+  X-Microsoft-Antispam: (BCL/SCL)
+  X-Forefront-Antispam-Report:
+  Content-Type:  (TNEF, MIME, etc.)
+  Thread-Topic / Thread-Index
+  X-MS-Exchange-CrossTenant-*
+  …and all other RFC 5322 fields"></textarea>
+
+      <div class="meta-row">
+        <div class="meta-field">
+          <label>Case / Ticket ID</label>
+          <input type="text" id="caseId" placeholder="CASE-2026-001">
+        </div>
+        <div class="meta-field">
+          <label>Analyst</label>
+          <input type="text" id="analystName" placeholder="J. Smith">
+        </div>
+      </div>
+
+      <div class="meta-row">
+        <div class="meta-field">
+          <label>Classification</label>
+          <select id="classif">
+            <option value="">Auto-detect</option>
+            <option value="phishing">Phishing</option>
+            <option value="bec">BEC / CEO Fraud</option>
+            <option value="malware">Malware Delivery</option>
+            <option value="spam">Spam</option>
+            <option value="internal">Internal Email</option>
+            <option value="legitimate">Legitimate</option>
+          </select>
+        </div>
+        <div class="meta-field">
+          <label>Organization Context</label>
+          <select id="orgCtx">
+            <option>Corporate / Enterprise</option>
+            <option>Financial Services</option>
+            <option>Healthcare</option>
+            <option>Government</option>
+            <option>Education</option>
+          </select>
+        </div>
+      </div>
+
+      <button class="analyze-btn" id="analyzeBtn" onclick="runForensics()">
+        <span>⚗</span>
+        <span>RUN FORENSIC ANALYSIS</span>
+      </button>
+    </div>
+
+    <div class="samples-bar">
+      <div class="samples-label">Load Sample</div>
+      <div class="sample-list">
+        <button class="sample-btn" onclick="loadSample('exchange')">Microsoft 365 Internal</button>
+        <button class="sample-btn" onclick="loadSample('spoofed')">Spoofed / BEC</button>
+        <button class="sample-btn" onclick="loadSample('phishing')">Phishing Email</button>
+        <button class="sample-btn" onclick="loadSample('external')">External Legit</button>
+        <button class="sample-btn" onclick="clearAll()">✕ Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ RIGHT — RESULTS ═══ -->
+  <div class="right-pane" id="rightPane">
+    <div class="empty-state" id="emptyState">
+      <div class="empty-grid">
+        <div class="eg-cell"><span>📡</span>Relay Hops</div>
+        <div class="eg-cell"><span>🔐</span>Auth Chain</div>
+        <div class="eg-cell"><span>🧬</span>IOC Extract</div>
+        <div class="eg-cell"><span>🏢</span>Exchange Meta</div>
+        <div class="eg-cell"><span>🕐</span>Timeline</div>
+        <div class="eg-cell"><span>🚩</span>Findings</div>
+      </div>
+      <div class="empty-title">Paste raw email headers to begin</div>
+      <div class="empty-sub">Full forensic decomposition of RFC 5322 headers including Microsoft 365 / Exchange metadata, authentication chain, relay path analysis, IOC extraction, and timestamp forensics.</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast" aria-live="polite"></div>
+
+<script>
+// ─── CLOCK ───
+function tick() {
+  document.getElementById('clock').textContent = new Date().toISOString().replace('T',' ').substring(0,19) + ' UTC';
+}
+tick(); setInterval(tick,1000);
+
+// ─── SAMPLE EMAILS ───
+const SAMPLES = {
+  exchange: `Received: from KUXPR01MB7999.apcprd01.prod.exchangelabs.com
+ (2603:1096:d10:82::13) by TYZPR01MB4554.apcprd01.prod.exchangelabs.com with
+ HTTPS; Thu, 7 May 2026 11:09:03 +0000
+Authentication-Results: dkim=none (message not signed)
+ header.d=none;dmarc=none action=none header.from=eguardian.com;
+Received: from SEZPR01MB7268.apcprd01.prod.exchangelabs.com
+ (2603:1096:101:2a0::7) by KUXPR01MB7999.apcprd01.prod.exchangelabs.com
+ (2603:1096:d10:82::13) with Microsoft SMTP Server (version=TLS1_2,
+ cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id 15.20.9870.25; Thu, 7 May
+ 2026 11:09:01 +0000
+Received: from SEZPR01MB7268.apcprd01.prod.exchangelabs.com
+ ([fe80::b781:6ba3:f494:4bcf]) by SEZPR01MB7268.apcprd01.prod.exchangelabs.com
+ ([fe80::b781:6ba3:f494:4bcf%6]) with mapi id 15.20.9891.008; Thu, 7 May 2026
+ 11:09:01 +0000
+Content-Type: application/ms-tnef; name="winmail.dat"
+Content-Transfer-Encoding: binary
+From: Dulani Jayakody <dulani.jayakody@eguardian.com>
+Subject: RE: Celebrating the Queen of our Heart ! - International Mother's Day
+Thread-Topic: Celebrating the Queen of our Heart ! - International Mother's Day
+Thread-Index: AQHc2GJbYZn1qVo9t0yIRFkw4ofd3LYCcixA
+Date: Thu, 7 May 2026 11:09:00 +0000
+Message-ID: <SEZPR01MB7268960D6D61089FC1547C4DEC3C2@SEZPR01MB7268.apcprd01.prod.exchangelabs.com>
+References: <19dd3c60f4b.600625ac87073.2949917336461383919@eguardian.com>
+In-Reply-To: <19dd3c60f4b.600625ac87073.2949917336461383919@eguardian.com>
+Accept-Language: en-US
+Content-Language: en-US
+X-MS-Has-Attach:
+X-MS-Exchange-Organization-SCL: 1
+X-MS-TNEF-Correlator: <SEZPR01MB7268960D6D61089FC1547C4DEC3C2@SEZPR01MB7268.apcprd01.prod.exchangelabs.com>
+MIME-Version: 1.0
+X-MS-Exchange-Organization-MessageDirectionality: Originating
+X-MS-Exchange-Organization-AuthSource: SEZPR01MB7268.apcprd01.prod.exchangelabs.com
+X-MS-Exchange-Organization-AuthAs: Internal
+X-MS-Exchange-Organization-AuthMechanism: 04
+X-MS-Exchange-Organization-Network-Message-Id: 827af59e-7dd0-4e99-1988-08deac290acb
+X-MS-PublicTrafficType: Email
+X-MS-TrafficTypeDiagnostic: SEZPR01MB7268:EE_|KUXPR01MB7999:EE_|TYZPR01MB4554:EE_
+Return-Path: dulani.jayakody@eguardian.com
+X-MS-Exchange-Organization-ExpirationStartTime: 07 May 2026 11:09:01.4100 (UTC)
+X-MS-Exchange-Organization-ExpirationStartTimeReason: OriginalSubmit
+X-MS-Exchange-Organization-ExpirationInterval: 1:00:00:00.0000000
+X-MS-Exchange-Organization-ExpirationIntervalReason: OriginalSubmit
+X-MS-Office365-Filtering-Correlation-Id: 827af59e-7dd0-4e99-1988-08deac290acb
+X-Microsoft-Antispam: BCL:0;ARA:13230040|366016|18002099003|13003099007|8096899003|56012099003|22082099003|41050700001;
+X-Forefront-Antispam-Report: CIP:255.255.255.255;CTRY:;LANG:en;SCL:1;SRV:;IPV:NLI;SFV:NSPM;H:SEZPR01MB7268.apcprd01.prod.exchangelabs.com;PTR:;CAT:NONE;SFS:(13230040)(366016)(18002099003)(13003099007)(8096899003)(56012099003)(22082099003)(41050700001);DIR:INT;
+X-MS-Exchange-Organization-Recipient-P2-Type: Bcc
+X-MS-Exchange-CrossTenant-OriginalArrivalTime: 07 May 2026 11:09:00.7522 (UTC)
+X-MS-Exchange-CrossTenant-FromEntityHeader: Hosted
+X-MS-Exchange-CrossTenant-Id: b2565e2c-ba87-4c23-9981-b2526e2e6c01
+X-MS-Exchange-CrossTenant-AuthSource: SEZPR01MB7268.apcprd01.prod.exchangelabs.com
+X-MS-Exchange-CrossTenant-AuthAs: Internal
+X-MS-Exchange-CrossTenant-Network-Message-Id: 827af59e-7dd0-4e99-1988-08deac290acb
+X-MS-Exchange-CrossTenant-MailboxType: HOSTED
+X-MS-Exchange-CrossTenant-UserPrincipalName: On2grOlpCqvXjEMf78v9h/Gu7umthnPeoOPxUTSwAaVopafUwdjydJP1OERv5wzwl7ug2ToYjJcEYn3y3H9wGqZ2mHMHZFcwhTNfP/+LzXg=
+X-MS-Exchange-Transport-CrossTenantHeadersStamped: KUXPR01MB7999
+X-MS-Exchange-Transport-EndToEndLatency: 00:00:02.4021988
+X-MS-Exchange-Processed-By-BccFoldering: 15.20.9891.006
+X-MS-Exchange-ExternalInOutlookResult: NotEnabled
+X-Microsoft-Antispam-Mailbox-Delivery: ucf:0;jmr:0;auth:0;dest:I;ENG:(910005)(944506478)(944626604)(920097)(425001)(930201)(20251009189)(140003);
+X-Microsoft-Antispam-Message-Info: VGecY3EIeqV6yY5TzAAgAJW7GpMmvGbHoATz+ZMcK97DXWUtBaTK9vuppDeslu1pBjEISDBAKGbKCzwy15Y0+GpuhUWHnaiQ7P/PfXr2fkkGvHbY7PpLQg9p7awUm0+i1RT2h/wGDsQA02F93+uP7Bw9ZRab5YKqgIc7bNEytvqkrVrZ2zDmeiQLbK7xI1f0a1v8oOXuNADt6ollAaSZdVYKsA2qu3E2z1ohq0GnYeAOcl+lUBTW96+YWdr8GzzdpF4m0BH2TjMN868sUh+gvlfajqaDrvqTQrYHLYumFAbY3R607RJ/ilbE4AP5gMCTbm8vy/FNEtJLPoC7vfgojTZtjY1rGIpf75ZV6zfZQmH4cob2rvYeEXUAVGu2qmCCiep7dWcAgL3jpGIMyQh1elDjcQ65hCiv+naMzJuWxE47vxh4xffYknc9oY5v/b9Tb2JFAZfeiFRqzChh8y5I9qO4N0PKd0giPGHGQ5KpKRLQqbJ5jr2ye934/jq6SkvUb85Sz9iiNuIEmQ4I7nsbESClNlL0LLFByWK0RX/GzKkaFiy1tO/MmdkrNcijUjMzj0Pp7lA/gkd9tUWRaP+gIWIueKxnLmdBEtCVVCuFf+lzsbK0dZx0x11gu1HAkhg8V87Cl4NimgqOMkvA0rIM6CPpWAKQYJq2HEOwhnLD2sHql0ni3z3ok+tgOlsrkKvXxY4Ea244d+vxprupHPhDuXcActAgdqL7+xdRM/fh1FeHeQW7mPdcEfumQ+bzD7TvsuXvuZaGW/yIePu8aoVp9WrjarLHDA6xylBTO7BckDmt9+LNkiy4XMCRDM5IgZws`,
+
+  spoofed: `Received: from mail.attacker-domain.ru (attacker-domain.ru [185.220.101.47])
+ by mx1.victimcorp.com (Postfix) with ESMTP id A1B2C3D4E5
+ for <cfo@victimcorp.com>; Thu, 7 May 2026 08:44:22 +0000
+Received: from localhost (localhost [127.0.0.1])
+ by attacker-domain.ru with SMTP id xyz123
+ for <cfo@victimcorp.com>; Thu, 7 May 2026 08:44:20 +0000
+Authentication-Results: mx1.victimcorp.com;
+ dkim=fail reason="signature verification failed" header.i=@victimcorp.com;
+ spf=fail (sender IP is 185.220.101.47) smtp.mailfrom=victimcorp.com;
+ dmarc=fail action=none header.from=victimcorp.com;
+DKIM-Signature: v=1; a=rsa-sha256; d=victimcorp.com; s=mail;
+ b=INVALIDSIGNATURE1234567890ABCDEF;
+X-Originating-IP: 185.220.101.47
+Message-ID: <fakemail.1234567@attacker-domain.ru>
+Date: Thu, 7 May 2026 08:44:19 +0000
+From: "CEO James Wilson" <ceo@victimcorp.com>
+Reply-To: ceo.wilson.urgent@gmail.com
+To: cfo@victimcorp.com
+Subject: URGENT: Wire Transfer Required Today
+X-Mailer: Mass Mailer Pro v3.2
+MIME-Version: 1.0
+Content-Type: text/plain`,
+
+  phishing: `Received: from mail.phishing-host.xyz (unknown [45.142.212.100])
+ by inbound.corp.com with ESMTP id BC44FE;
+ Thu, 7 May 2026 09:15:00 +0000
+Received: from [192.168.1.99] (helo=smtp.paypa1-verify.com)
+ by phishing-host.xyz with esmtp (Exim 4.92)
+ for <accounts@corp.com>; Thu, 7 May 2026 09:14:58 +0000
+Authentication-Results: inbound.corp.com;
+ dkim=none;
+ spf=fail smtp.mailfrom=paypa1-verify.com;
+ dmarc=none header.from=paypal.com;
+X-Originating-IP: 45.142.212.100
+Message-ID: <1234abc.456def@phishing-host.xyz>
+Date: Thu, 7 May 2026 09:14:57 +0000
+From: "PayPal Security" <security@paypal.com>
+Return-Path: <bounce@paypa1-verify.com>
+Reply-To: noreply@paypa1-verify.com
+To: accounts@corp.com
+Subject: Action Required: Verify Your Account Now
+X-Spam-Status: Yes, score=8.4
+MIME-Version: 1.0
+Content-Type: text/html`,
+
+  external: `Received: from mail-ej1-f196.google.com (mail-ej1-f196.google.com [209.85.218.196])
+ by mx.techcorp.com (Postfix) with ESMTPS id 3A4B5C6D
+ for <user@techcorp.com>; Thu, 7 May 2026 10:30:00 +0000
+Authentication-Results: mx.techcorp.com;
+ dkim=pass (2048-bit key; unprotected) header.d=gmail.com header.i=@gmail.com;
+ spf=pass (google.com: domain of sender@gmail.com designates 209.85.218.196 as permitted sender) smtp.mailfrom=sender@gmail.com;
+ dmarc=pass (p=none sp=quarantine) header.from=gmail.com;
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=gmail.com; s=20210112;
+ h=mime-version:from:date:message-id:subject:to:content-type;
+ bh=ABC123DEF456GHI789JKL==;
+ b=VALIDSIGNATUREVALIDSIGNATUREVALIDSIGNATURE==
+Received-SPF: pass (google.com: 209.85.218.196 is permitted) client-ip=209.85.218.196;
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; d=1e100.net;
+Message-ID: <CABxyz123abc.456def@mail.gmail.com>
+Date: Thu, 7 May 2026 10:29:58 +0000
+From: Jane Doe <sender@gmail.com>
+To: user@techcorp.com
+Subject: Meeting agenda for tomorrow
+MIME-Version: 1.0
+Content-Type: text/plain`
+};
+
+function loadSample(key) {
+  document.getElementById('rawInput').value = SAMPLES[key];
+  showToast('Sample loaded');
+}
+
+function clearAll() {
+  document.getElementById('rawInput').value = '';
+  document.getElementById('caseId').value = '';
+  document.getElementById('analystName').value = '';
+  document.getElementById('rightPane').innerHTML = document.getElementById('emptyState')?.outerHTML || '';
+  resetEmptyState();
+}
+
+function resetEmptyState() {
+  document.getElementById('rightPane').innerHTML = `
+    <div class="empty-state" id="emptyState">
+      <div class="empty-grid">
+        <div class="eg-cell"><span>📡</span>Relay Hops</div>
+        <div class="eg-cell"><span>🔐</span>Auth Chain</div>
+        <div class="eg-cell"><span>🧬</span>IOC Extract</div>
+        <div class="eg-cell"><span>🏢</span>Exchange Meta</div>
+        <div class="eg-cell"><span>🕐</span>Timeline</div>
+        <div class="eg-cell"><span>🚩</span>Findings</div>
+      </div>
+      <div class="empty-title">Paste raw email headers to begin</div>
+      <div class="empty-sub">Full forensic decomposition of RFC 5322 headers including Microsoft 365 / Exchange metadata, authentication chain, relay path analysis, IOC extraction, and timestamp forensics.</div>
+    </div>`;
+}
+
+// ─── PARSER ───
+function parseHeaders(raw) {
+  const fields = {};
+  const allPairs = [];
+  const lines = raw.split('\n');
+  let key = null, val = '';
+
+  for (const line of lines) {
+    if (/^\S[^:]*:/.test(line)) {
+      if (key) { fields[key] = (fields[key] ? fields[key] + ' ' : '') + val.trim(); allPairs.push([key, val.trim()]); }
+      const ci = line.indexOf(':');
+      key = line.substring(0, ci).trim();
+      val = line.substring(ci + 1);
+    } else if (key && /^\s/.test(line)) {
+      val += ' ' + line.trim();
+    }
+  }
+  if (key) { fields[key] = (fields[key] ? fields[key] + ' ' : '') + val.trim(); allPairs.push([key, val.trim()]); }
+
+  return { fields, allPairs };
+}
+
+function extractReceivedHops(raw) {
+  const hops = [];
+  const blocks = raw.split(/\n(?=Received:)/gi);
+  blocks.forEach(block => {
+    const m = block.match(/^Received:\s*([\s\S]*?)(?=\n\S|\n$|$)/i);
+    if (!m) return;
+    const text = m[1].replace(/\n\s+/g,' ').trim();
+    const from  = text.match(/from\s+([\S]+(?:\s+\([^)]+\))?)/i)?.[1] || '';
+    const by    = text.match(/by\s+(\S+)/i)?.[1] || '';
+    const proto = text.match(/with\s+([A-Z0-9_\s]+?)(?:\s+id|\s*;)/i)?.[1]?.trim() || '';
+    const id    = text.match(/id\s+(\S+)/i)?.[1] || '';
+    const date  = text.match(/;\s*(.+)$/)?.[1]?.trim() || '';
+    hops.push({ from, by, proto, id, date, raw: text });
+  });
+  return hops;
+}
+
+function parseAuthResults(raw) {
+  const authLine = (raw.match(/Authentication-Results:[^\n]*(?:\n[ \t][^\n]*)*/i) || [''])[0];
+  const spfMatch   = authLine.match(/spf=(\w+)/i);
+  const dkimMatch  = authLine.match(/dkim=(\w+)/i);
+  const dmarcMatch = authLine.match(/dmarc=(\w+)/i);
+  const spfDetail   = authLine.match(/smtp\.mailfrom=(\S+)/i)?.[1] || '';
+  const dkimDetail  = authLine.match(/header\.[id]=@?(\S+)/i)?.[1] || '';
+  const dmarcDetail = authLine.match(/header\.from=(\S+)/i)?.[1] || '';
+  return {
+    spf:   { result: spfMatch?.[1] || 'none', detail: spfDetail },
+    dkim:  { result: dkimMatch?.[1] || 'none', detail: dkimDetail },
+    dmarc: { result: dmarcMatch?.[1] || 'none', detail: dmarcDetail },
+    raw: authLine
+  };
+}
+
+function parseMicrosoftHeaders(fields) {
+  const scl    = fields['X-MS-Exchange-Organization-SCL'] || fields['X-MS-Exchange-Organization-Scl'] || '?';
+  const bcl    = (fields['X-Microsoft-Antispam'] || '').match(/BCL:(\d+)/i)?.[1] || '?';
+  const sclFa  = (fields['X-Forefront-Antispam-Report'] || '').match(/SCL:(\d+)/i)?.[1] || '?';
+  const dir    = (fields['X-Forefront-Antispam-Report'] || '').match(/DIR:(\w+)/i)?.[1] || '?';
+  const cat    = (fields['X-Forefront-Antispam-Report'] || '').match(/CAT:(\w+)/i)?.[1] || '?';
+  const cip    = (fields['X-Forefront-Antispam-Report'] || '').match(/CIP:([\d.]+)/i)?.[1] || (fields['X-Originating-IP'] || '?');
+  const ipv    = (fields['X-Forefront-Antispam-Report'] || '').match(/IPV:(\w+)/i)?.[1] || '?';
+  const sfv    = (fields['X-Forefront-Antispam-Report'] || '').match(/SFV:(\w+)/i)?.[1] || '?';
+  const authAs  = fields['X-MS-Exchange-Organization-AuthAs'] || fields['X-MS-Exchange-CrossTenant-AuthAs'] || '?';
+  const authMech= fields['X-MS-Exchange-Organization-AuthMechanism'] || '?';
+  const msgDir  = fields['X-MS-Exchange-Organization-MessageDirectionality'] || '?';
+  const tenantId= fields['X-MS-Exchange-CrossTenant-Id'] || '?';
+  const mbType  = fields['X-MS-Exchange-CrossTenant-MailboxType'] || '?';
+  const trafficType = fields['X-MS-PublicTrafficType'] || '?';
+  const latency = fields['X-MS-Exchange-Transport-EndToEndLatency'] || '?';
+  const diagPath = fields['X-MS-TrafficTypeDiagnostic'] || '?';
+  const exchVer = (fields['Received'] || '').match(/id (15\.\d+\.\d+\.\d+)/)?.[1] || '?';
+  const mapiId  = (fields['Received'] || '').match(/mapi id ([\d.]+)/i)?.[1] || '?';
+  const isMsft  = !!(fields['X-MS-Exchange-Organization-SCL'] || fields['X-MS-Exchange-CrossTenant-Id']);
+  const isInternal = authAs.toLowerCase() === 'internal';
+  const bccFoldering = fields['X-MS-Exchange-Processed-By-BccFoldering'] || null;
+  const tnefCorr = fields['X-MS-TNEF-Correlator'] || null;
+  const externalResult = fields['X-MS-Exchange-ExternalInOutlookResult'] || null;
+
+  return { scl, bcl, sclFa, dir, cat, cip, ipv, sfv, authAs, authMech, msgDir,
+    tenantId, mbType, trafficType, latency, diagPath, exchVer, mapiId,
+    isMsft, isInternal, bccFoldering, tnefCorr, externalResult };
+}
+
+function extractIOCs(raw, fields) {
+  const iocs = { ips:[], domains:[], emails:[], urls:[], hashes:[] };
+
+  // IPs
+  const ipRx = /\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b/g;
+  const ips = [...new Set(raw.match(ipRx) || [])].filter(ip => ip !== '255.255.255.255' && !ip.startsWith('127.') && !ip.startsWith('0.'));
+  ips.forEach(ip => { if (!iocs.ips.includes(ip)) iocs.ips.push(ip); });
+
+  // IPv6
+  const ipv6Rx = /\[((?:[0-9a-f]{1,4}::?){1,7}[0-9a-f]{1,4})\]/gi;
+  [...raw.matchAll(ipv6Rx)].forEach(m => { if (!iocs.ips.includes(m[1])) iocs.ips.push(m[1]); });
+
+  // Domains from key fields
+  const domFields = ['From','Return-Path','Reply-To','X-MS-Exchange-Organization-AuthSource'];
+  domFields.forEach(f => {
+    const v = fields[f] || '';
+    const m = v.match(/@([\w.-]+)/);
+    if (m && !iocs.domains.includes(m[1])) iocs.domains.push(m[1]);
+  });
+
+  // Exchange server FQDNs
+  const recvRx = /from\s+([\w.-]+\.exchangelabs\.com|[\w.-]+\.prod\.exchangelabs\.com)/gi;
+  [...raw.matchAll(recvRx)].forEach(m => { if (!iocs.domains.includes(m[1])) iocs.domains.push(m[1]); });
+
+  // Emails
+  const emailRx = /[\w.+-]+@[\w.-]+\.[a-z]{2,}/gi;
+  [...new Set(raw.match(emailRx) || [])].forEach(e => { if (!iocs.emails.includes(e)) iocs.emails.push(e); });
+
+  // URLs
+  const urlRx = /https?:\/\/[^\s<>"']+/gi;
+  [...new Set(raw.match(urlRx) || [])].forEach(u => { if (!iocs.urls.includes(u)) iocs.urls.push(u); });
+
+  // Message-IDs and network IDs (useful for correlation)
+  const msgId = fields['Message-ID'] || '';
+  const netMsgId = fields['X-MS-Exchange-Organization-Network-Message-Id'] || fields['X-MS-Exchange-CrossTenant-Network-Message-Id'] || '';
+  const correlId = fields['X-MS-Office365-Filtering-Correlation-Id'] || '';
+
+  return { ...iocs, msgId, netMsgId, correlId };
+}
+
+function buildFindings(fields, auth, msft, hops, raw) {
+  const findings = [];
+  const from = fields['From'] || '';
+  const returnPath = fields['Return-Path'] || '';
+  const replyTo = fields['Reply-To'] || '';
+
+  // DKIM not signed
+  if (auth.dkim.result === 'none' || auth.dkim.result === 'neutral') {
+    findings.push({ sev:'high', ico:'🔏', title:'DKIM Not Signed', text:'Email was not signed with DKIM. Message integrity and sender authenticity cannot be cryptographically verified. This is unusual for corporate email in 2026.' });
+  } else if (auth.dkim.result === 'fail') {
+    findings.push({ sev:'critical', ico:'🔏', title:'DKIM Signature Failure', text:'DKIM signature is present but verification failed. Message may have been tampered in transit or the signing key is invalid.' });
+  }
+
+  // DMARC
+  if (auth.dmarc.result === 'none') {
+    findings.push({ sev:'medium', ico:'🛡️', title:'DMARC Not Evaluated / None Policy', text:`DMARC was not evaluated (result: none) for ${auth.dmarc.detail || 'sender domain'}. Domain lacks DMARC protection — susceptible to spoofing.` });
+  } else if (auth.dmarc.result === 'fail') {
+    findings.push({ sev:'critical', ico:'🛡️', title:'DMARC Authentication Failure', text:'Email failed DMARC policy check. High probability of spoofing or domain impersonation.' });
+  }
+
+  // SPF
+  if (auth.spf.result === 'fail') {
+    findings.push({ sev:'critical', ico:'📧', title:'SPF Hard Fail', text:`SPF check failed for domain ${auth.spf.detail}. Sending IP is not authorized by the domain's SPF record.` });
+  } else if (auth.spf.result === 'softfail') {
+    findings.push({ sev:'high', ico:'📧', title:'SPF Soft Fail', text:'SPF returned softfail (~all). Sending server is not a designated sender but policy is not enforced.' });
+  } else if (auth.spf.result === 'neutral' || auth.spf.result === 'none') {
+    findings.push({ sev:'medium', ico:'📧', title:'SPF Not Configured', text:'No SPF result obtained. Domain may lack an SPF record.' });
+  }
+
+  // From vs Return-Path mismatch
+  const fromEmail = from.match(/[\w.+-]+@[\w.-]+/)?.[0]?.toLowerCase() || '';
+  const rpEmail   = returnPath.match(/[\w.+-]+@[\w.-]+/)?.[0]?.toLowerCase() || '';
+  if (fromEmail && rpEmail && fromEmail !== rpEmail) {
+    findings.push({ sev:'high', ico:'↩️', title:'From / Return-Path Mismatch', text:`Display From address (${fromEmail}) differs from Return-Path (${rpEmail}). Can indicate spoofing, mailing list, or routing anomaly.` });
+  }
+
+  // Reply-To mismatch
+  const replyEmail = replyTo.match(/[\w.+-]+@[\w.-]+/)?.[0]?.toLowerCase() || '';
+  if (replyEmail && fromEmail && replyEmail !== fromEmail) {
+    const replyDom = replyEmail.split('@')[1];
+    const fromDom  = fromEmail.split('@')[1];
+    if (replyDom !== fromDom) {
+      const freeProviders = ['gmail.com','yahoo.com','hotmail.com','protonmail.com','outlook.com'];
+      const sev = freeProviders.includes(replyDom) ? 'critical' : 'high';
+      findings.push({ sev, ico:'↪️', title:'Reply-To Domain Mismatch', text:`Reply-To domain (${replyDom}) is different from sender domain (${fromDom}). ${freeProviders.includes(replyDom) ? 'Free email provider used for Reply-To — classic BEC/phishing technique.' : 'Verify this is intentional.'}` });
+    }
+  }
+
+  // TNEF / winmail.dat
+  if ((fields['Content-Type'] || '').includes('ms-tnef') || (fields['Content-Type'] || '').includes('winmail.dat')) {
+    findings.push({ sev:'info', ico:'📎', title:'TNEF Attachment (winmail.dat)', text:'Email uses Microsoft TNEF encoding (winmail.dat). This is standard for Outlook/Exchange rich-text emails but may be unreadable by non-Microsoft clients. Not inherently malicious.' });
+  }
+
+  // Microsoft-specific internal routing
+  if (msft.isMsft && msft.isInternal) {
+    findings.push({ sev:'info', ico:'🏢', title:'Microsoft 365 Internal Email', text:`Confirmed Microsoft 365 / Exchange Online origin. AuthAs=Internal, AuthMechanism=${msft.authMech}. Message routed entirely within Exchange Online infrastructure.` });
+  }
+
+  // BCC delivery
+  if (fields['X-MS-Exchange-Organization-Recipient-P2-Type'] === 'Bcc') {
+    findings.push({ sev:'medium', ico:'👁️', title:'Delivered as BCC Recipient', text:'This copy was delivered to a BCC recipient. The To/CC recipients are unaware of this copy. Review distribution list for appropriateness.' });
+  }
+
+  // CIP is internal/loopback
+  if (msft.cip === '255.255.255.255') {
+    findings.push({ sev:'info', ico:'🌐', title:'CIP: 255.255.255.255 (Internal/Cloud)', text:'Forefront reports CIP as 255.255.255.255, indicating origination from within Microsoft 365 cloud infrastructure rather than an external IP.' });
+  }
+
+  // Suspicious IP ranges (check in hops)
+  const suspRanges = ['185.220','45.142','77.83','103.21','195.206','194.165'];
+  hops.forEach(hop => {
+    const ipMatch = hop.from.match(/\[(\d+\.\d+)/);
+    if (ipMatch && suspRanges.some(r => ipMatch[1].startsWith(r.replace('.','.').split('.').slice(0,2).join('.')))) {
+      findings.push({ sev:'critical', ico:'🌍', title:'Suspicious Relay IP Detected', text:`Hop from IP matching known threat intelligence range: ${hop.from}. Cross-reference with threat intel feeds.` });
+    }
+  });
+
+  // SFS rules from antispam
+  const sfsRaw = fields['X-Microsoft-Antispam'] || '';
+  if (sfsRaw.includes('BCL:0')) {
+    findings.push({ sev:'info', ico:'📊', title:'BCL Score: 0', text:'Bulk Complaint Level is 0 — not classified as bulk/mass email by Microsoft filtering.' });
+  }
+
+  const scl = parseInt(msft.scl);
+  if (!isNaN(scl)) {
+    if (scl >= 5) findings.push({ sev:'high', ico:'🚨', title:`High SCL Score: ${scl}`, text:`Spam Confidence Level of ${scl} indicates Microsoft filters classify this as likely spam.` });
+    else if (scl === -1) findings.push({ sev:'info', ico:'✅', title:'SCL: -1 (Bypassed Filtering)', text:'SCL of -1 means email bypassed spam filtering (e.g., from safe-sender list or internal relay).' });
+    else if (scl >= 1) findings.push({ sev:'low', ico:'📊', title:`SCL Score: ${scl}`, text:`Spam Confidence Level ${scl} — below spam threshold, email delivered normally.` });
+  }
+
+  // Lookalike domain check
+  const lookalikePairs = [['paypal','paypa1'],['microsoft','micros0ft'],['google','g00gle'],['amazon','arnazon']];
+  lookalikePairs.forEach(([legit, fake]) => {
+    if (fromEmail.includes(fake)) {
+      findings.push({ sev:'critical', ico:'🎭', title:'Lookalike Domain Detected', text:`Sender domain contains "${fake}" which impersonates "${legit}" using character substitution. Strong indicator of phishing.` });
+    }
+  });
+
+  // Thread context
+  if (fields['Thread-Index'] || fields['Thread-Topic']) {
+    findings.push({ sev:'info', ico:'🧵', title:'Reply/Thread Context', text:`Email is part of a thread: "${fields['Thread-Topic'] || ''}". Thread-Index present — can be used to reconstruct conversation history.` });
+  }
+
+  return findings;
+}
+
+function scoreFindings(findings) {
+  let score = 0;
+  findings.forEach(f => {
+    if (f.sev === 'critical') score += 30;
+    else if (f.sev === 'high') score += 18;
+    else if (f.sev === 'medium') score += 10;
+    else if (f.sev === 'low') score += 4;
+  });
+  return Math.min(100, score);
+}
+
+function getVerdict(score) {
+  if (score >= 70) return { label:'CRITICAL', cls:'vb-critical', color:'var(--red)', textColor:'var(--red2)' };
+  if (score >= 45) return { label:'HIGH RISK', cls:'vb-high', color:'var(--orange)', textColor:'var(--orange2)' };
+  if (score >= 25) return { label:'MEDIUM RISK', cls:'vb-medium', color:'var(--yellow)', textColor:'var(--yellow)' };
+  if (score >= 10) return { label:'LOW RISK', cls:'vb-low', color:'var(--g)', textColor:'var(--g2)' };
+  return { label:'CLEAN / INFORMATIONAL', cls:'vb-clean', color:'var(--g)', textColor:'var(--g2)' };
+}
+
+// ─── BUILD TIMELINE ───
+function buildTimeline(hops, fields) {
+  const events = [];
+  // Reverse hops to go origin → destination
+  const rev = [...hops].reverse();
+  rev.forEach((hop, i) => {
+    if (hop.date) events.push({ time: hop.date, title: i === 0 ? 'Message originated' : `Relay hop ${i+1}`, detail: `${hop.from} → ${hop.by} via ${hop.proto}` });
+  });
+  if (fields['Date']) events.push({ time: fields['Date'], title: 'Date header timestamp', detail: `Stated send time from From: ${fields['From'] || ''}` });
+  const arrivalMatch = (fields['X-MS-Exchange-CrossTenant-OriginalArrivalTime'] || '').match(/(\d+ \w+ \d+ \d+:\d+:\d+\.\d+ \(UTC\))/);
+  if (arrivalMatch) events.push({ time: arrivalMatch[1], title: 'Microsoft 365 arrival', detail: 'CrossTenant original arrival recorded by Exchange Online' });
+  return events;
+}
+
+// ─── MAIN FORENSICS ───
+function runForensics() {
+  const raw = document.getElementById('rawInput').value.trim();
+  if (!raw) { showToast('⚠ Paste raw email headers first'); return; }
+
+  const rp = document.getElementById('rightPane');
+  rp.innerHTML = `
+    <div class="analyzing-wrap">
+      <div class="scan-grid">
+        ${Array(20).fill(0).map((_,i) => `<div class="sg-cell" style="animation-delay:${(i*0.08).toFixed(2)}s"></div>`).join('')}
+      </div>
+      <div class="scan-log" id="scanLog"></div>
+    </div>`;
+
+  document.getElementById('statusText').textContent = 'ANALYZING';
+  document.getElementById('statusPill').className = 'status-pill busy';
+
+  const steps = [
+    'Parsing RFC 5322 header fields…',
+    'Tracing SMTP relay chain…',
+    'Extracting authentication results…',
+    'Analyzing Microsoft Exchange metadata…',
+    'Extracting IOCs (IPs, domains, emails)…',
+    'Running forensic heuristics…',
+    'Building timeline…',
+    'Generating findings report…'
+  ];
+
+  let i = 0;
+  const logEl = () => document.getElementById('scanLog');
+
+  const iv = setInterval(() => {
+    const log = logEl();
+    if (!log) { clearInterval(iv); return; }
+    if (i > 0 && log.children[i-1]) log.children[i-1].classList.add('done');
+    if (i < steps.length) {
+      const d = document.createElement('div');
+      d.className = 'scan-log-item';
+      d.style.animationDelay = '0s';
+      d.textContent = steps[i];
+      log.appendChild(d);
+      i++;
+    } else {
+      clearInterval(iv);
+      setTimeout(() => renderForensics(raw), 300);
+    }
+  }, 280);
+}
+
+function renderForensics(raw) {
+  const { fields, allPairs } = parseHeaders(raw);
+  const hops     = extractReceivedHops(raw);
+  const auth     = parseAuthResults(raw);
+  const msft     = parseMicrosoftHeaders(fields);
+  const iocs     = extractIOCs(raw, fields);
+  const findings = buildFindings(fields, auth, msft, hops, raw);
+  const timeline = buildTimeline(hops, fields);
+  const score    = scoreFindings(findings);
+  const verdict  = getVerdict(score);
+
+  const caseId   = document.getElementById('caseId').value || '—';
+  const analyst  = document.getElementById('analystName').value || '—';
+  const ts       = new Date().toISOString();
+
+  const circ = 2 * Math.PI * 28;
+  const offset = circ - (score / 100) * circ;
+
+  // ── RENDER ALL ──
+  document.getElementById('rightPane').innerHTML = `
+  <div class="results-wrap">
+
+    <!-- ════ VERDICT ════ -->
+    <div class="verdict-banner ${verdict.cls}">
+      <div class="verdict-score-ring">
+        <svg viewBox="0 0 72 72">
+          <circle class="vsr-track" cx="36" cy="36" r="28"/>
+          <circle class="vsr-fill" cx="36" cy="36" r="28"
+            stroke="${verdict.color}"
+            stroke-dasharray="${circ.toFixed(2)}"
+            stroke-dashoffset="${circ.toFixed(2)}"
+            id="vFill"/>
+        </svg>
+        <div class="verdict-score-num" style="color:${verdict.textColor}">
+          ${score}<small>score</small>
+        </div>
+      </div>
+      <div class="verdict-body">
+        <div class="verdict-level" style="color:${verdict.textColor}">${verdict.label}</div>
+        <div class="verdict-summary">${
+          score >= 70 ? 'Multiple critical indicators detected. High-confidence threat — recommend immediate escalation and quarantine.' :
+          score >= 45 ? 'Significant anomalies detected in authentication chain and/or routing. Recommend manual review.' :
+          score >= 25 ? 'Moderate findings. Authentication gaps present. Further investigation recommended.' :
+          score >= 10 ? 'Minor findings. Email appears generally legitimate with minor policy gaps.' :
+          'No significant threat indicators. Email appears consistent with normal operational patterns.'
+        }</div>
+        <div class="verdict-ts">
+          ⚗ Analyzed: ${ts.replace('T',' ').substring(0,19)} UTC
+          &nbsp;|&nbsp; Case: ${caseId}
+          &nbsp;|&nbsp; Analyst: ${analyst}
+          &nbsp;|&nbsp; Findings: ${findings.length}
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ ENVELOPE ════ -->
+    <div class="sec-card">
+      <div class="sec-head">
+        <div class="sec-title">📨 Email Envelope</div>
+      </div>
+      <table class="kv-table">
+        ${kv('From',           fields['From']           || '—', autoClass(fields['From']))}
+        ${kv('Return-Path',    fields['Return-Path']    || '—', returnPathClass(fields))}
+        ${kv('Reply-To',       fields['Reply-To']       || '(none set)', fields['Reply-To'] ? 'v-orange' : 'v-dim')}
+        ${kv('To',             fields['To']             || '—')}
+        ${kv('CC',             fields['CC'] || fields['Cc'] || '(none)', 'v-dim')}
+        ${kv('Subject',        fields['Subject']        || '—')}
+        ${kv('Date',           fields['Date']           || '—')}
+        ${kv('Message-ID',     fields['Message-ID']     || '—', 'v-blue')}
+        ${kv('MIME-Version',   fields['MIME-Version']   || '—')}
+        ${kv('Content-Type',   fields['Content-Type']   || '—', (fields['Content-Type']||'').includes('ms-tnef')?'v-orange':'')}
+        ${kv('Content-Transfer-Encoding', fields['Content-Transfer-Encoding'] || '—')}
+        ${kv('In-Reply-To',    fields['In-Reply-To']    || '—', 'v-dim')}
+        ${kv('References',     (fields['References']||'').substring(0,120) || '—', 'v-dim')}
+        ${kv('Thread-Topic',   fields['Thread-Topic']   || '—')}
+        ${kv('Thread-Index',   fields['Thread-Index']   || '—', 'v-dim')}
+        ${kv('Accept-Language',fields['Accept-Language']||'—')}
+        ${kv('Content-Language',fields['Content-Language']||'—')}
+      </table>
+    </div>
+
+    <!-- ════ AUTH CHAIN ════ -->
+    <div class="sec-card">
+      <div class="sec-head">
+        <div class="sec-title">🔐 Authentication Chain</div>
+        <div style="display:flex;gap:6px">
+          <span class="sec-badge badge-${auth.spf.result === 'pass'?'pass':auth.spf.result==='fail'?'fail':'none'}">SPF: ${auth.spf.result.toUpperCase()}</span>
+          <span class="sec-badge badge-${auth.dkim.result === 'pass'?'pass':auth.dkim.result==='fail'?'fail':'none'}">DKIM: ${auth.dkim.result.toUpperCase()}</span>
+          <span class="sec-badge badge-${auth.dmarc.result === 'pass'?'pass':auth.dmarc.result==='fail'?'fail':auth.dmarc.result==='none'?'none':'warn'}">DMARC: ${auth.dmarc.result.toUpperCase()}</span>
+        </div>
+      </div>
+      <div class="auth-rows">
+        ${authRow('SPF', auth.spf.result,
+          auth.spf.result === 'pass' ? `Sender authorized for ${auth.spf.detail}` :
+          auth.spf.result === 'fail' ? `Hard fail — ${auth.spf.detail} not in SPF record` :
+          auth.spf.result === 'none' ? 'No SPF record found or not evaluated' :
+          `SPF result: ${auth.spf.result} — ${auth.spf.detail}`)}
+        ${authRow('DKIM', auth.dkim.result,
+          auth.dkim.result === 'pass'  ? `Signature valid for ${auth.dkim.detail}` :
+          auth.dkim.result === 'none'  ? 'Message not signed with DKIM — integrity unverifiable' :
+          auth.dkim.result === 'fail'  ? `Signature verification failed for ${auth.dkim.detail}` :
+          `DKIM: ${auth.dkim.result}`)}
+        ${authRow('DMARC', auth.dmarc.result,
+          auth.dmarc.result === 'pass' ? `Policy satisfied for ${auth.dmarc.detail}` :
+          auth.dmarc.result === 'none' ? `No DMARC policy for ${auth.dmarc.detail} — no enforcement` :
+          auth.dmarc.result === 'fail' ? `DMARC policy violation for ${auth.dmarc.detail}` :
+          `DMARC: ${auth.dmarc.result} — ${auth.dmarc.detail}`)}
+      </div>
+      ${auth.raw ? `<div style="padding:8px 16px 12px"><div style="font-size:9px;color:var(--text3);letter-spacing:1px;text-transform:uppercase;margin-bottom:5px">Raw Authentication-Results</div><div style="font-family:var(--mono);font-size:10px;color:var(--text2);background:var(--bg);border:1px solid var(--line);border-radius:3px;padding:10px 12px;word-break:break-all;line-height:1.7">${auth.raw.replace(/Authentication-Results:\s*/i,'').trim()}</div></div>` : ''}
+    </div>
+
+    <!-- ════ RELAY PATH ════ -->
+    <div class="sec-card">
+      <div class="sec-head">
+        <div class="sec-title">📡 SMTP Relay Path</div>
+        <span class="sec-badge badge-info">${hops.length} hop${hops.length !== 1 ? 's':''}</span>
+      </div>
+      <div class="hop-chain">
+        ${hops.length === 0 ? '<div style="padding:8px;font-size:11px;color:var(--text3)">No Received: headers found.</div>' :
+          hops.map((hop, i) => `
+          ${i > 0 ? '<div class="hop-connector"></div>' : ''}
+          <div class="hop-item" style="animation-delay:${i*0.1}s">
+            <div class="hop-num">${i+1}</div>
+            <div class="hop-body">
+              <div class="hop-from">${escH(hop.from) || '<span style="color:var(--text3)">(origination)</span>'}</div>
+              <div class="hop-by">→ by ${escH(hop.by)}</div>
+              ${hop.proto ? `<div class="hop-proto">${escH(hop.proto)}${hop.id ? ' · id: ' + escH(hop.id) : ''}</div>` : ''}
+            </div>
+            <div class="hop-time">${escH(hop.date)}</div>
+          </div>`).join('')}
+      </div>
+    </div>
+
+    <!-- ════ MICROSOFT 365 METADATA ════ -->
+    ${msft.isMsft ? `
+    <div class="sec-card">
+      <div class="sec-head">
+        <div class="sec-title">🏢 Microsoft 365 / Exchange Metadata</div>
+        <span class="sec-badge ${msft.isInternal?'badge-info':'badge-warn'}">${msft.isInternal?'INTERNAL':'EXTERNAL'}</span>
+      </div>
+      <div class="msft-grid">
+        ${msftCell('SCL (Exchange)', msft.scl, scl_class(parseInt(msft.scl)))}
+        ${msftCell('BCL (Bulk Complaint)', msft.bcl, 'mv-good')}
+        ${msftCell('SCL (Forefront)', msft.sclFa)}
+        ${msftCell('Direction', msft.dir, msft.dir==='INT'?'mv-blue':'')}
+        ${msftCell('CAT (Category)', msft.cat)}
+        ${msftCell('CIP (Client IP)', msft.cip, msft.cip==='255.255.255.255'?'mv-blue':'')}
+        ${msftCell('IPV', msft.ipv)}
+        ${msftCell('SFV (Safety Filter)', msft.sfv, msft.sfv==='NSPM'?'mv-good':'')}
+        ${msftCell('AuthAs', msft.authAs, msft.isInternal?'mv-good':'mv-warn')}
+        ${msftCell('AuthMechanism', msft.authMech + ' ' + mechDesc(msft.authMech))}
+        ${msftCell('MessageDirectionality', msft.msgDir)}
+        ${msftCell('TrafficType', msft.trafficType)}
+        ${msftCell('CrossTenant-MailboxType', msft.mbType)}
+        ${msftCell('CrossTenant-Id', msft.tenantId, 'mv-blue')}
+        ${msftCell('E2E Latency', msft.latency)}
+        ${msftCell('Exchange Server Ver', msft.exchVer)}
+        ${msft.mapiId !== '?' ? msftCell('MAPI Version', msft.mapiId) : ''}
+        ${msft.bccFoldering ? msftCell('BCC Foldering', msft.bccFoldering, 'mv-warn') : ''}
+        ${msft.tnefCorr ? msftCell('TNEF Correlator', (msft.tnefCorr||'').substring(0,60)+'…', 'mv-blue') : ''}
+        ${msft.externalResult ? msftCell('External in Outlook', msft.externalResult) : ''}
+      </div>
+      ${msft.diagPath !== '?' ? `<div style="padding:10px 14px;border-top:1px solid var(--line)">
+        <div class="msft-label">Traffic Diagnostic Path</div>
+        <div class="msft-value mv-blue" style="font-size:10px">${escH(msft.diagPath)}</div>
+      </div>` : ''}
+    </div>` : ''}
+
+    <!-- ════ FORENSIC FINDINGS ════ -->
+    <div class="sec-card">
+      <div class="sec-head">
+        <div class="sec-title">🚩 Forensic Findings</div>
+        <span class="sec-badge ${findings.filter(f=>f.sev==='critical'||f.sev==='high').length>0?'badge-critical':'badge-info'}">${findings.length} finding${findings.length!==1?'s':''}</span>
+      </div>
+      <div class="flags-list">
+        ${findings.length === 0 ?
+          '<div style="padding:10px;font-size:11px;color:var(--g);font-family:var(--sans)">✓ No significant anomalies detected.</div>' :
+          findings.map((f,i) => `
+          <div class="flag-item f-${f.sev}" style="animation-delay:${i*0.07}s">
+            <span class="flag-ico">${f.ico}</span>
+            <div class="flag-text">
+              <strong>${escH(f.title)}</strong>
+              <span>${escH(f.text)}</span>
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>
+
+    <!-- ════ IOC EXTRACTION ════ -->
+    <div class="sec-card">
+      <div class="sec-head">
+        <div class="sec-title">🧬 IOC Extraction</div>
+        <span class="sec-badge badge-info">${iocs.ips.length} IP · ${iocs.domains.length} domain · ${iocs.emails.length} email</span>
+      </div>
+      <div class="ioc-grid">
+        <div class="ioc-section">
+          <div class="ioc-label">IP Addresses</div>
+          ${iocs.ips.length === 0 ? '<div style="font-size:10px;color:var(--text3)">None extracted</div>' :
+            iocs.ips.map(ip => `<div class="ioc-item"><span class="ioc-type it-ip">IP</span><span class="ioc-val">${escH(ip)}</span></div>`).join('')}
+        </div>
+        <div class="ioc-section">
+          <div class="ioc-label">Domains</div>
+          ${iocs.domains.length === 0 ? '<div style="font-size:10px;color:var(--text3)">None extracted</div>' :
+            iocs.domains.map(d => `<div class="ioc-item"><span class="ioc-type it-dom">DOM</span><span class="ioc-val">${escH(d)}</span></div>`).join('')}
+        </div>
+        <div class="ioc-section">
+          <div class="ioc-label">Email Addresses</div>
+          ${iocs.emails.length === 0 ? '<div style="font-size:10px;color:var(--text3)">None extracted</div>' :
+            iocs.emails.slice(0,12).map(e => `<div class="ioc-item"><span class="ioc-type it-email">EMAIL</span><span class="ioc-val">${escH(e)}</span></div>`).join('')}
+        </div>
+        <div class="ioc-section">
+          <div class="ioc-label">URLs & Correlation IDs</div>
+          ${iocs.urls.map(u => `<div class="ioc-item"><span class="ioc-type it-url">URL</span><span class="ioc-val">${escH(u.substring(0,60))}${u.length>60?'…':''}</span></div>`).join('')}
+          ${iocs.netMsgId ? `<div class="ioc-item"><span class="ioc-type it-hash">NET-ID</span><span class="ioc-val">${escH(iocs.netMsgId)}</span></div>` : ''}
+          ${iocs.correlId ? `<div class="ioc-item"><span class="ioc-type it-hash">CORR-ID</span><span class="ioc-val">${escH(iocs.correlId)}</span></div>` : ''}
+          ${!iocs.urls.length && !iocs.netMsgId && !iocs.correlId ? '<div style="font-size:10px;color:var(--text3)">None extracted</div>' : ''}
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ DELIVERY TIMELINE ════ -->
+    ${timeline.length > 0 ? `
+    <div class="sec-card">
+      <div class="sec-head">
+        <div class="sec-title">🕐 Delivery Timeline</div>
+        <span class="sec-badge badge-info">${timeline.length} events</span>
+      </div>
+      <div class="timeline">
+        ${timeline.map(ev => `
+          <div class="tl-item">
+            <div class="tl-time">${escH(ev.time.substring(0,32))}</div>
+            <div class="tl-event"><strong>${escH(ev.title)}</strong>${escH(ev.detail)}</div>
+          </div>`).join('')}
+      </div>
+    </div>` : ''}
+
+    <!-- ════ ANTISPAM DECODE ════ -->
+    ${(fields['X-Forefront-Antispam-Report'] || fields['X-Microsoft-Antispam']) ? `
+    <div class="sec-card">
+      <div class="sec-head">
+        <div class="sec-title">🔍 Antispam Report Decode</div>
+      </div>
+      <table class="kv-table">
+        ${decodeForefront(fields['X-Forefront-Antispam-Report'] || '')}
+        ${decodeAntispam(fields['X-Microsoft-Antispam'] || '')}
+        ${decodeDelivery(fields['X-Microsoft-Antispam-Mailbox-Delivery'] || '')}
+      </table>
+    </div>` : ''}
+
+    <!-- ════ ALL HEADERS RAW ════ -->
+    <div class="sec-card">
+      <button class="collapsible-toggle" id="rawToggle" onclick="toggleRaw()">
+        <span>All Header Fields (${allPairs.length} fields)</span>
+        <span class="arrow">›</span>
+      </button>
+      <div class="collapsible-body" id="rawBody">
+        <div style="overflow-x:auto">
+          <table class="raw-headers-table">
+            <tbody>
+              ${allPairs.map(([k,v]) => `
+                <tr>
+                  <td class="rh-key">${escH(k)}</td>
+                  <td class="rh-val ${rawHeaderClass(k,v)}">${escH(v)}</td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ EXPORT BAR ════ -->
+    <div class="export-bar">
+      <button class="export-btn" onclick="exportTXT()">⬇ Export TXT</button>
+      <button class="export-btn" onclick="exportJSON()">⬇ Export JSON</button>
+      <button class="export-btn" onclick="copyIOCs()">📋 Copy IOCs</button>
+      <button class="export-btn" onclick="copyAllHeaders()">📋 Copy All Headers</button>
+    </div>
+
+  </div>`;
+
+  // Animate score ring
+  setTimeout(() => {
+    const fill = document.getElementById('vFill');
+    if (fill) fill.style.strokeDashoffset = offset.toFixed(2);
+  }, 120);
+
+  document.getElementById('statusText').textContent = 'READY';
+  document.getElementById('statusPill').className = 'status-pill ready';
+
+  // Store for export
+  window._forensicResult = { fields, hops, auth, msft, iocs, findings, score, verdict, caseId, analyst, ts };
+}
+
+// ─── HELPER RENDERERS ───
+function kv(key, val, cls) {
+  return `<tr><td class="kv-key">${escH(key)}</td><td class="kv-val ${cls||''}">${escH(val)}</td></tr>`;
+}
+
+function authRow(name, result, detail) {
+  const r = result.toLowerCase();
+  const cls = r === 'pass' ? 'pass' : r === 'fail' ? 'fail' : r === 'none' ? 'none' : 'warn';
+  return `<div class="auth-row">
+    <span class="auth-name">${escH(name)}</span>
+    <span class="auth-detail">${escH(detail)}</span>
+    <span class="auth-result ${cls}">${escH(result.toUpperCase())}</span>
+  </div>`;
+}
+
+function msftCell(label, value, cls) {
+  if (!value || value === '?' || value === '') return '';
+  return `<div class="msft-cell"><div class="msft-label">${escH(label)}</div><div class="msft-value ${cls||''}">${escH(value)}</div></div>`;
+}
+
+function mechDesc(m) {
+  const map = {'04':'Kerberos (internal Exchange)','05':'NTLM','00':'Anonymous','01':'Exchange/Outlook','02':'Basic Auth','03':'Certificate'};
+  return map[m] ? `(${map[m]})` : '';
+}
+
+function scl_class(scl) {
+  if (scl <= 0) return 'mv-good';
+  if (scl >= 5) return 'mv-bad';
+  return '';
+}
+
+function autoClass(val) {
+  if (!val) return '';
+  return '';
+}
+
+function returnPathClass(fields) {
+  const from = (fields['From']||'').match(/[\w.+-]+@[\w.-]+/)?.[0]?.toLowerCase() || '';
+  const rp   = (fields['Return-Path']||'').match(/[\w.+-]+@[\w.-]+/)?.[0]?.toLowerCase() || '';
+  if (!from || !rp) return '';
+  return from !== rp ? 'v-orange' : 'v-green';
+}
+
+function decodeForefront(raw) {
+  if (!raw) return '';
+  const pairs = raw.replace('X-Forefront-Antispam-Report:','').trim().split(';');
+  const map = { CIP:'Client IP',CTRY:'Country',LANG:'Language',SCL:'Spam Confidence Level',SRV:'Server',IPV:'IP Verdict',SFV:'Safety Filter Verdict',H:'HELO/EHLO hostname',PTR:'PTR record',CAT:'Filter Category',DIR:'Direction' };
+  return pairs.filter(p=>p.includes(':')).map(p => {
+    const [k,v] = p.trim().split(':');
+    const label = map[k] || k;
+    const cls = (k==='SCL' && parseInt(v)>=5) ? 'v-red' : (k==='SFV' && v==='NSPM') ? 'v-green' : '';
+    return kv(`Forefront · ${label} (${k})`, v || '—', cls);
+  }).join('');
+}
+
+function decodeAntispam(raw) {
+  if (!raw) return '';
+  const bcl = raw.match(/BCL:(\d+)/i)?.[1];
+  const ara = raw.match(/ARA:([\d|]+)/i)?.[1];
+  let out = '';
+  if (bcl !== undefined) out += kv('Antispam · BCL (Bulk Complaint Level)', bcl, bcl==='0'?'v-green':'v-orange');
+  if (ara) out += kv('Antispam · ARA rule IDs', ara, 'v-dim');
+  return out;
+}
+
+function decodeDelivery(raw) {
+  if (!raw) return '';
+  const dest = raw.match(/dest:(\w)/i)?.[1];
+  const destMap = { I:'Inbox', J:'Junk', D:'Deleted', Q:'Quarantine' };
+  const destLabel = dest ? (destMap[dest] || dest) : '?';
+  const ucf  = raw.match(/ucf:(\d+)/i)?.[1];
+  const jmr  = raw.match(/jmr:(\d+)/i)?.[1];
+  let out = '';
+  if (dest) out += kv('Delivery · Destination', destLabel, dest==='I'?'v-green':dest==='J'?'v-orange':'v-red');
+  if (ucf !== undefined) out += kv('Delivery · UCF score', ucf);
+  if (jmr !== undefined) out += kv('Delivery · JMR score', jmr);
+  return out;
+}
+
+function rawHeaderClass(k, v) {
+  const kl = k.toLowerCase();
+  if (['from','return-path','reply-to','x-originating-ip'].includes(kl)) return 'rh-note';
+  if (kl.startsWith('x-microsoft-antispam') || kl.startsWith('x-forefront')) return 'rh-note';
+  if (kl === 'dkim-signature') return 'rh-note';
+  if (kl === 'authentication-results') return 'rh-good';
+  return '';
+}
+
+function escH(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function toggleRaw() {
+  const toggle = document.getElementById('rawToggle');
+  const body   = document.getElementById('rawBody');
+  if (!toggle || !body) return;
+  toggle.classList.toggle('open');
+  body.classList.toggle('open');
+}
+
+// ─── EXPORT ───
+function exportTXT() {
+  const R = window._forensicResult;
+  if (!R) return;
+  const lines = [
+    'FORENSICMAIL — EMAIL FORENSIC REPORT',
+    '='.repeat(60),
+    `Case ID:  ${R.caseId}`,
+    `Analyst:  ${R.analyst}`,
+    `Analyzed: ${R.ts}`,
+    `Score:    ${R.score}/100 — ${R.verdict.label}`,
+    '',
+    'ENVELOPE',
+    '-'.repeat(40),
+    `From:         ${R.fields['From'] || '—'}`,
+    `Return-Path:  ${R.fields['Return-Path'] || '—'}`,
+    `Reply-To:     ${R.fields['Reply-To'] || '—'}`,
+    `Subject:      ${R.fields['Subject'] || '—'}`,
+    `Date:         ${R.fields['Date'] || '—'}`,
+    `Message-ID:   ${R.fields['Message-ID'] || '—'}`,
+    '',
+    'AUTHENTICATION',
+    '-'.repeat(40),
+    `SPF:   ${R.auth.spf.result.toUpperCase()} — ${R.auth.spf.detail}`,
+    `DKIM:  ${R.auth.dkim.result.toUpperCase()} — ${R.auth.dkim.detail}`,
+    `DMARC: ${R.auth.dmarc.result.toUpperCase()} — ${R.auth.dmarc.detail}`,
+    '',
+    'RELAY HOPS',
+    '-'.repeat(40),
+    ...R.hops.map((h,i) => `  [${i+1}] FROM: ${h.from}\n      BY:   ${h.by}\n      VIA:  ${h.proto}\n      TIME: ${h.date}`),
+    '',
+    'IOCs',
+    '-'.repeat(40),
+    `IPs:     ${R.iocs.ips.join(', ') || 'none'}`,
+    `Domains: ${R.iocs.domains.join(', ') || 'none'}`,
+    `Emails:  ${R.iocs.emails.join(', ') || 'none'}`,
+    `URLs:    ${R.iocs.urls.join(', ') || 'none'}`,
+    `Net-MsgID: ${R.iocs.netMsgId || '—'}`,
+    `Correl-ID: ${R.iocs.correlId || '—'}`,
+    '',
+    'FINDINGS',
+    '-'.repeat(40),
+    ...R.findings.map((f,i) => `  [${f.sev.toUpperCase()}] ${f.title}\n  ${f.text}`),
+    '',
+    '='.repeat(60),
+  ];
+  const blob = new Blob([lines.join('\n')], {type:'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `forensicmail_${R.caseId.replace(/\s/g,'_')}_${Date.now()}.txt`;
+  a.click();
+  showToast('TXT report downloaded');
+}
+
+function exportJSON() {
+  const R = window._forensicResult;
+  if (!R) return;
+  const out = {
+    meta: { caseId: R.caseId, analyst: R.analyst, timestamp: R.ts },
+    verdict: { score: R.score, level: R.verdict.label },
+    envelope: { from: R.fields['From'], returnPath: R.fields['Return-Path'], replyTo: R.fields['Reply-To'], to: R.fields['To'], subject: R.fields['Subject'], date: R.fields['Date'], messageId: R.fields['Message-ID'] },
+    authentication: R.auth,
+    relayHops: R.hops,
+    microsoftMeta: R.msft,
+    iocs: R.iocs,
+    findings: R.findings
+  };
+  const blob = new Blob([JSON.stringify(out, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `forensicmail_${R.caseId.replace(/\s/g,'_')}_${Date.now()}.json`;
+  a.click();
+  showToast('JSON exported');
+}
+
+function copyIOCs() {
+  const R = window._forensicResult;
+  if (!R) { showToast('Run analysis first'); return; }
+  const txt = [
+    '# IPs', ...R.iocs.ips,
+    '# Domains', ...R.iocs.domains,
+    '# Emails', ...R.iocs.emails,
+    '# URLs', ...R.iocs.urls
+  ].join('\n');
+  navigator.clipboard.writeText(txt).then(() => showToast('IOCs copied'));
+}
+
+function copyAllHeaders() {
+  const raw = document.getElementById('rawInput').value;
+  navigator.clipboard.writeText(raw).then(() => showToast('Headers copied'));
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = '✓ ' + msg;
+  t.classList.add('show');
+  clearTimeout(t._t);
+  t._t = setTimeout(() => t.classList.remove('show'), 2400);
+}
+</script>
+</body>
+</html>
